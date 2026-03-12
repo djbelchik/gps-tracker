@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗺️ GPS Трекер</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBYTejn5WjeTSzR1bFud9yMLvT5QQKo7F0"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        #map {
+            width: 100%;
+            height: 500px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }
+        
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .stats {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-item {
+            margin: 10px 0;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        
+        .table-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            overflow: hidden;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+        }
+        
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        tr:hover {
+            background: #f0f0f0;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .status-online {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .status-offline {
+            background: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗺️ GPS Трекер</h1>
+            <p>Отслеживание машины в реальном времени</p>
+            <div id="statusBadge" class="status-badge status-offline">⚫ Ожидание данных...</div>
+        </div>
+        
+        <div class="content">
+            <div id="map" class="loading">
+                <div class="spinner"></div>
+                <p>Загрузка карты...</p>
+            </div>
+            
+            <div class="sidebar">
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Последняя координата</div>
+                        <div class="stat-value" id="lastLat">-</div>
+                        <div class="stat-value" id="lastLon">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Точек на карте</div>
+                        <div class="stat-value" id="pointCount">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Последнее обновление</div>
+                        <div class="stat-value" id="lastUpdate" style="font-size: 1em;">-</div>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>№</th>
+                                <th>Широта</th>
+                                <th>Долгота</th>
+                                <th>Время</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: #999;">Загрузка данных...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase конфигурация
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYTejn5WjeTSzR1bFud9yMLvT5QQKo7F0",
+            projectId: "gps-vb-e9c10",
+            databaseURL: "https://gps-vb-e9c10-default-rtdb.europe-west1.firebasedatabase.app"
+        };
+
+        // Инициализируем Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Переменные
+        let map;
+        let markers = [];
+        let polyline;
+        let locations = [];
+
+        // Инициализируем карту
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 15,
+                center: {lat: 47.7264, lng: 29.9685},
+                mapTypeId: 'roadmap',
+                styles: [
+                    {
+                        "elementType": "geometry",
+                        "stylers": [{"color": "#f5f5f5"}]
+                    }
+                ]
+            });
+
+            // Загружаем данные из Firebase
+            loadLocations();
+        }
+
+        // Загружаем координаты из Firebase
+        function loadLocations() {
+            const carRef = database.ref('car_001/locations');
+            
+            carRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                
+                if (data) {
+                    locations = [];
+                    
+                    // Конвертируем объект в массив
+                    Object.values(data).forEach((loc, index) => {
+                        locations.push({
+                            lat: loc.lat,
+                            lon: loc.lon,
+                            time: loc.time || '-',
+                            count: index + 1
+                        });
+                    });
+                    
+                    // Сортируем по времени (если есть)
+                    locations.sort((a, b) => {
+                        if (a.time === '-' || b.time === '-') return 0;
+                        return new Date(a.time) - new Date(b.time);
+                    });
+                    
+                    // Обновляем карту
+                    updateMap();
+                    
+                    // Обновляем таблицу
+                    updateTable();
+                    
+                    // Обновляем статистику
+                    updateStats();
+                } else {
+                    console.log('Нет данных в Firebase');
+                }
+            });
+        }
+
+        // Обновляем карту
+        function updateMap() {
+            // Удаляем старые маркеры
+            markers.forEach(marker => marker.setMap(null));
+            markers = [];
+
+            // Удаляем старую линию
+            if (polyline) polyline.setMap(null);
+
+            // Координаты для полилинии
+            const path = locations.map(loc => ({
+                lat: loc.lat,
+                lng: loc.lon
+            }));
+
+            // Рисуем маршрут
+            if (path.length > 1) {
+                polyline = new google.maps.Polyline({
+                    path: path,
+                    geodesic: true,
+                    strokeColor: '#667eea',
+                    strokeOpacity: 0.7,
+                    strokeWeight: 3,
+                    map: map
+                });
+            }
+
+            // Добавляем маркеры
+            locations.forEach((loc, index) => {
+                const color = index === locations.length - 1 ? '#4CAF50' : '#667eea';
+                const icon = index === locations.length - 1 ? '📍' : '⭕';
+
+                const marker = new google.maps.Marker({
+                    position: {lat: loc.lat, lng: loc.lon},
+                    map: map,
+                    title: `${icon} Точка ${loc.count}`,
+                    label: {
+                        text: String(loc.count),
+                        color: 'white',
+                        fontSize: '14px',
+                        fontWeight: 'bold'
+                    },
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: color,
+                        fillOpacity: 0.8,
+                        strokeColor: 'white',
+                        strokeWeight: 2
+                    }
+                });
+
+                markers.push(marker);
+
+                // Информационное окно
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div style="font-family: Arial; font-size: 12px;">
+                            <strong>Точка ${loc.count}</strong><br>
+                            Lat: ${loc.lat.toFixed(6)}<br>
+                            Lon: ${loc.lon.toFixed(6)}<br>
+                            Время: ${loc.time}
+                        </div>
+                    `
+                });
+
+                marker.addListener('click', () => {
+                    infoWindow.open(map, marker);
+                });
+            });
+
+            // Центрируем карту на последней точке
+            if (locations.length > 0) {
+                const lastLoc = locations[locations.length - 1];
+                map.setCenter({lat: lastLoc.lat, lng: lastLoc.lon});
+                
+                // Автоматически подбираем zoom
+                if (locations.length > 1) {
+                    const bounds = new google.maps.LatLngBounds();
+                    path.forEach(point => bounds.extend(point));
+                    map.fitBounds(bounds);
+                }
+            }
+        }
+
+        // Обновляем таблицу
+        function updateTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            if (locations.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #999;">Нет данных</td></tr>';
+                return;
+            }
+
+            locations.forEach((loc, index) => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${loc.count}</td>
+                    <td>${loc.lat.toFixed(6)}</td>
+                    <td>${loc.lon.toFixed(6)}</td>
+                    <td>${loc.time}</td>
+                `;
+                
+                if (index === locations.length - 1) {
+                    row.style.backgroundColor = '#e8f5e9';
+                    row.style.fontWeight = 'bold';
+                }
+            });
+        }
+
+        // Обновляем статистику
+        function updateStats() {
+            const lastLoc = locations[locations.length - 1];
+            
+            document.getElementById('lastLat').textContent = lastLoc.lat.toFixed(6);
+            document.getElementById('lastLon').textContent = lastLoc.lon.toFixed(6);
+            document.getElementById('pointCount').textContent = locations.length;
+            
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('ru-RU');
+            
+            // Статус
+            const statusBadge = document.getElementById('statusBadge');
+            statusBadge.className = 'status-badge status-online';
+            statusBadge.textContent = '🟢 В сети';
+        }
+
+        // Инициализируем при загрузке страницы
+        window.addEventListener('load', initMap);
+    </script>
+</body>
+</html>
